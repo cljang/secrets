@@ -3,7 +3,8 @@ require('dotenv').config();
 const express = require("express");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const md5 = require("md5")
+const bcrypt = require("bcrypt")
+const saltRounds = 10;
 
 // ========================= Setup ========================= 
 // Create express app
@@ -40,18 +41,25 @@ app.get("/login", function(req, res) {
 
 app.post("/login", function(req, res) {
   const username = req.body.username;
-  const password = md5(req.body.password);
+  const password = req.body.password;
 
+  // Find matching user
   User.findOne({email: username}, function(err, foundUser) {
     if(err) {
       console.log(err);
     } else {
       if(foundUser) {
-        if(foundUser.password === password) {
-          res.render("secrets");
-        } else {
-          res.render("login", {username: username, password: password, errorMsg: "Incorrect email or password. Please try again."})
-        }
+        bcrypt.compare(password, foundUser.password, function(err, result) {
+          if(err) {
+            console.log(err);
+          } else {
+            if(result === true) {
+              res.render("secrets");
+            } else {
+              res.render("login", {username: username, password: password, errorMsg: "Incorrect email or password. Please try again."})
+            }
+          }
+        });
       }
     }
   })
@@ -62,18 +70,29 @@ app.get("/register", function(req, res) {
 });
 
 app.post("/register", function(req, res) {
-  const newUser = new User({
-    email: req.body.username,
-    password: md5(req.body.password)
-  });
 
-  newUser.save(function(err) {
+  const username = req.body.username;
+
+  // Hash and salt password using bcrypt
+  bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
     if(err) {
       console.log(err);
     } else {
-      res.render("secrets")
+      const newUser = new User({
+        email: username,
+        password: hash
+      });
+      
+      // Save newUser to database
+      newUser.save(function(err) {
+        if(err) {
+          console.log(err);
+        } else {
+          res.render("secrets")
+        }
+      });
     }
-  })
+  });
 });
 
 
