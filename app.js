@@ -3,8 +3,9 @@ require('dotenv').config();
 const express = require("express");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt")
-const saltRounds = 10;
+const session = require("express-session");
+const passport = require("passport");
+const passportLocalMongoose = require("passport-local-mongoose")
 
 // ========================= Setup ========================= 
 // Create express app
@@ -15,6 +16,17 @@ app.set('view engine', 'ejs');
 
 // Setup "Bodyparser"
 app.use(express.urlencoded({extended: true}));
+
+// Setup express-session Package
+app.use(session({
+  secret: process.env.SECRET, 
+  resave: false,
+  saveUninitialized: false
+}));
+
+// Initialize Passport package and use it to deal with session
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Setup static files
 app.use(express.static("public"));
@@ -27,7 +39,14 @@ const userSchema = new mongoose.Schema({
   password: String
 })
 
+userSchema.plugin(passportLocalMongoose);
+
 const User = new mongoose.model("User", userSchema);
+
+passport.use(User.createStrategy());
+
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 // ========================= GET/POST ========================= 
 
@@ -43,26 +62,24 @@ app.post("/login", function(req, res) {
   const username = req.body.username;
   const password = req.body.password;
 
-  // Find matching user
-  User.findOne({email: username}, function(err, foundUser) {
+  passport.authenticate("local", function(err, user) {
     if(err) {
       console.log(err);
     } else {
-      if(foundUser) {
-        bcrypt.compare(password, foundUser.password, function(err, result) {
+      if(!user) {
+        res.render("login", {username: username, password: password, errorMsg: "Incorrect email or password. Please try again."})
+      } else {
+        req.logIn(user, function(err) {
           if(err) {
             console.log(err);
           } else {
-            if(result === true) {
-              res.render("secrets");
-            } else {
-              res.render("login", {username: username, password: password, errorMsg: "Incorrect email or password. Please try again."})
-            }
+            res.redirect("/secrets");
           }
-        });
+        })
       }
     }
-  })
+  })(req, res);
+
 });
 
 app.get("/register", function(req, res) {
@@ -71,29 +88,30 @@ app.get("/register", function(req, res) {
 
 app.post("/register", function(req, res) {
 
-  const username = req.body.username;
-
-  // Hash and salt password using bcrypt
-  bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+  User.register({username: req.body.username}, req.body.password, function(err, user) {
     if(err) {
       console.log(err);
+      res.redirect("/register");
     } else {
-      const newUser = new User({
-        email: username,
-        password: hash
-      });
-      
-      // Save newUser to database
-      newUser.save(function(err) {
-        if(err) {
-          console.log(err);
-        } else {
-          res.render("secrets")
-        }
-      });
+      passport.authenticate("local")(req, res, function() {
+        res.redirect("/secrets");
+      })
     }
   });
 });
+
+app.get("/secrets", function(req, res) {
+  if(req.isAuthenticated()) {
+    res.render("secrets");
+  } else {
+    res.redirect("login");
+  }
+})
+
+app.get("/logout", function(req, res) {
+  req.logOut();
+  res.redirect("/");
+})
 
 
 
