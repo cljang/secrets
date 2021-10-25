@@ -9,10 +9,16 @@ body {
 }
 
 .secret-text {
-  text-align: center;
+  /* text-align: center; */
   font-size: 2rem;
   color: #fff;
   background-color: #000;
+  margin: 0;
+  padding: 10px 10%;
+  height: 250px;
+  display: flex;
+  align-items:center;
+  justify-content:center;
 }
 
 .error-msg {
